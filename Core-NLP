@@ -1,0 +1,59 @@
+pip install scrapy transformers scikit-learn tensorflow numpy pandas
+import scrapy
+
+class GithubProfileSpider(scrapy.Spider):
+    name = 'github_profile'
+    start_urls = ['https://github.com/username']  # List of user GitHub profiles
+
+    def parse(self, response):
+        yield {
+            'name': response.css('h1::text').get(),
+            'bio': response.css('div.user-profile-bio::text').get(),
+            'repos': response.css('span.repo::text').getall(),
+            'languages': response.css('span[itemprop="programmingLanguage"]::text').getall(),
+            'location': response.css('span.p-label::text').get(),
+        }
+from transformers import AutoTokenizer, AutoModel
+import torch
+
+# Load pre-trained BERT model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
+model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
+
+def get_embeddings(texts):
+    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**inputs)
+    # Average the embeddings across all tokens for each sentence
+    embeddings = outputs.last_hidden_state.mean(dim=1)
+    return embeddings
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# Example data: embeddings for experts and seekers
+expert_embeddings = np.array([get_embeddings(expert_data) for expert_data in expert_profiles])
+seeker_embedding = get_embeddings(seeker_query)
+
+# Compute cosine similarity between seeker and each expert
+similarities = cosine_similarity(seeker_embedding, expert_embeddings)
+
+# Find the best matching expert
+best_match_idx = np.argmax(similarities)
+best_match = expert_profiles[best_match_idx]
+
+print(f"Best match for the seeker is expert: {best_match['name']}")
+def process_query(query):
+    # Use BERT or another model to encode the query
+    query_embedding = get_embeddings([query])
+    return query_embedding
+
+# User input
+seeker_query = input("What expertise are you seeking? ")
+seeker_embedding = process_query(seeker_query)
+
+# Match with experts
+similarities = cosine_similarity(seeker_embedding, expert_embeddings)
+best_match_idx = np.argmax(similarities)
+best_match = expert_profiles[best_match_idx]
+
+print(f"Best expert match: {best_match['name']} with similarity score {similarities[0][best_match_idx]}")
